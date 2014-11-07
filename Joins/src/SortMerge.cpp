@@ -36,7 +36,10 @@ Status SortMerge::Execute(JoinSpec& left, JoinSpec& right, JoinSpec& out) {
 
 	////// ***** Phase 2: Merging ***** //////
 	RecordID leftrid, rightrid, insertedrid, fixLeft, fixRight, eopLeft, eopRight;
-	int *leftJoinAttr, *rightJoinAttr;
+	int *leftJoinAttr = new int();
+	int *rightJoinAttr = new int();
+    int *leftJoinAttrPrime = new int();
+	int *rightJoinAttrPrime = new int();
 	char *leftarr = new char[left.recLen];
 	char *rightarr = new char[right.recLen];
 	char *joinedarr = new char[out.recLen];
@@ -44,60 +47,61 @@ Status SortMerge::Execute(JoinSpec& left, JoinSpec& right, JoinSpec& out) {
 	// Get the first tuples from the left and right relations.
 	stat = leftScan->GetNext(leftrid,leftarr,left.recLen); if (stat != OK) {std::cout << "TRACER    1" << std::endl; return FAIL;}
 	stat = rightScan->GetNext(rightrid,rightarr,right.recLen); if (stat != OK) {std::cout << "TRACER    2" << std::endl; return FAIL;}
-	leftJoinAttr = (int*)(leftarr + left.offset);
-	rightJoinAttr = (int*)(rightarr + right.offset);
+	*leftJoinAttr = *leftJoinAttrPrime = *(int*)(leftarr + left.offset);
+	*rightJoinAttr = *rightJoinAttrPrime = *(int*)(rightarr + right.offset);
 
 	while (!leftScan->noMore && !rightScan->noMore) {
 		if (*leftJoinAttr < *rightJoinAttr) {
 			stat = leftScan->GetNext(leftrid,leftarr,left.recLen); if (stat != OK) {std::cout << "TRACER    3" << std::endl; return FAIL;}
-			leftJoinAttr = (int*)(leftarr + left.offset);
-			//std::cout << "TRACERy" << std::endl;
+			*leftJoinAttr = *leftJoinAttrPrime = *(int*)(leftarr + left.offset);
 		}
 		else if (*leftJoinAttr > *rightJoinAttr) {
 			stat = rightScan->GetNext(rightrid,rightarr,right.recLen); if (stat != OK) {std::cout << "TRACER    4" << std::endl; return FAIL;}
-			rightJoinAttr = (int*)(rightarr + right.offset);
-			//std::cout << "TRACERx" << std::endl;
+			*rightJoinAttr = *rightJoinAttrPrime = *(int*)(rightarr + right.offset);
 		}
 		else {
-			// Join records and insert them into tmpHeap.
-			//MakeNewRecord(joinedarr,leftarr,rightarr,left,right);
-			//stat = tmpHeap->InsertRecord(joinedarr,out.recLen,insertedrid); if (stat != OK) {std::cout << "TRACER    5" << std::endl; return FAIL;}
-		    
 			// Mark beginning of each LEFT and RIGHT partition.
 			fixLeft = eopLeft = leftScan->currRid;
 			fixRight = eopRight = rightScan->currRid;
 
-			// Continue scanning current RIGHT relation to find the end of the RIGHT partition.
-			while (!rightScan->noMore) {
-				stat = rightScan->GetNext(rightrid,rightarr,right.recLen); if (stat != OK) {std::cout << "TRACER    6" << std::endl; return FAIL;}
-				if (rightJoinAttr == (int*)(rightarr + right.offset))
-					eopRight = rightScan->currRid;
+			// Continue scanning current RIGHT relation to find the end of the RIGHT partition (eopRight is index of first element after partition).
+			while (!rightScan->noMore && rightJoinAttr == rightJoinAttrPrime) {
+				stat = rightScan->GetNext(rightrid,rightarr,right.recLen); if (stat != OK) {std::cout << "TRACER    5" << std::endl; return FAIL;}
+				rightJoinAttrPrime = (int*)(rightarr + right.offset);
+				eopRight = rightScan->currRid;
 			}
 			rightScan->MoveTo(fixRight);
+		    stat = rightScan->GetNext(rightrid,rightarr,right.recLen); if (stat != OK) {std::cout << "TRACER    6" << std::endl; return FAIL;}
 
-			// Continue scanning current LEFT relation to find the end of the LEFT partition.
-			while (!leftScan->noMore) {
+			// Continue scanning current LEFT relation to find the end of the LEFT partition (eopLeft is index of first element after partition).
+			while (!leftScan->noMore && leftJoinAttr == leftJoinAttrPrime) {
 				stat = leftScan->GetNext(leftrid,leftarr,left.recLen); if (stat != OK) {std::cout << "TRACER    7" << std::endl; return FAIL;}
-				if (leftJoinAttr == (int*)(leftarr + left.offset))
-					eopLeft = leftScan->currRid;
+				leftJoinAttrPrime = (int*)(leftarr + left.offset);
+				eopLeft = leftScan->currRid;
 			}
 			leftScan->MoveTo(fixLeft);
+	        stat = leftScan->GetNext(leftrid,leftarr,left.recLen); if (stat != OK) {std::cout << "TRACER    8" << std::endl; return FAIL;}
 
 			// For each element of LEFT partition, join with each element of RIGHT partition.
-			while (leftScan->currRid != eopLeft) {
-				while (rightScan->currRid != eopRight) {
+			while (!leftScan->noMore && leftScan->currRid != eopLeft) {
+				while (!rightScan->noMore && rightScan->currRid != eopRight) {
 					JoinMethod::MakeNewRecord(joinedarr,leftarr,rightarr,left,right);
-					stat = tmpHeap->InsertRecord(joinedarr,out.recLen,insertedrid); if (stat != OK) {std::cout << "TRACER    8" << std::endl; return FAIL;}
-					stat = rightScan->GetNext(rightrid,rightarr,right.recLen); if (stat != OK) {std::cout << "TRACER    9" << std::endl; return FAIL;}
+					stat = tmpHeap->InsertRecord(joinedarr,out.recLen,insertedrid); if (stat != OK) {std::cout << "TRACER    9" << std::endl; return FAIL;}
+					stat = rightScan->GetNext(rightrid,rightarr,right.recLen); if (stat != OK) {std::cout << "TRACER    10" << std::endl; return FAIL;}
+					if (rightScan->noMore) {
+						JoinMethod::MakeNewRecord(joinedarr,leftarr,rightarr,left,right);
+						stat = tmpHeap->InsertRecord(joinedarr,out.recLen,insertedrid); if (stat != OK) {std::cout << "TRACER    11" << std::endl; return FAIL;}
+					}
 				}
 				rightScan->MoveTo(fixRight);
-				stat = leftScan->GetNext(leftrid,leftarr,left.offset); if (stat != OK) {std::cout << "TRACER    10" << std::endl; return FAIL;}
+				stat = leftScan->GetNext(leftrid,leftarr,left.recLen); if (stat != OK) {std::cout << "TRACER    12" << std::endl; return FAIL;}
+				if (leftScan->noMore) {
+					JoinMethod::MakeNewRecord(joinedarr,leftarr,rightarr,left,right);
+						stat = tmpHeap->InsertRecord(joinedarr,out.recLen,insertedrid); if (stat != OK) {std::cout << "TRACER    13" << std::endl; return FAIL;}
+				}
 			}
-
-			stat = leftScan->GetNext(leftrid,leftarr,left.recLen); if (stat != OK) {std::cout << "TRACER    12" << std::endl; return FAIL;}
-			leftJoinAttr = (int*)(leftarr + left.offset); 
-			stat = rightScan->GetNext(rightrid,rightarr,right.recLen); if (stat != OK) {std::cout << "TRACER    13" << std::endl; return FAIL;}
-			rightJoinAttr = (int*)(rightarr + right.offset);
+			rightScan->MoveTo(eopRight);
+			stat = rightScan->GetNext(rightrid,rightarr,right.recLen); if (stat != OK) {std::cout << "TRACER    14" << std::endl; return FAIL;}
 		}
 	}
 	
@@ -105,5 +109,9 @@ Status SortMerge::Execute(JoinSpec& left, JoinSpec& right, JoinSpec& out) {
 	delete[] leftarr;
 	delete[] rightarr;
 	delete[] joinedarr;
+	delete leftJoinAttr;
+	delete rightJoinAttr;
+    delete leftJoinAttrPrime;
+	delete rightJoinAttrPrime;
 	return OK;
 }
