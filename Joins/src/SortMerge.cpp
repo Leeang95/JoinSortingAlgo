@@ -78,6 +78,7 @@ Status SortMerge::Execute(JoinSpec& left, JoinSpec& right, JoinSpec& out) {
 			stat = rightScan->GetNext(rightrid,rightarr,right.recLen); if (stat != OK) {std::cout << "TRACER    6" << std::endl; return FAIL;}
 			prightJoinAttr = (int*)(rightarr + right.offset);
 			while (!rightScan->noMore && *leftJoinAttr == *prightJoinAttr) {
+				//### It never goes inside this loop ### //
 				MakeNewRecord(joinedarr,leftarr,rightarr,left,right);
 			    stat = tmpHeap->InsertRecord(joinedarr,out.recLen,insertedrid); if (stat != OK) {std::cout << "TRACER    7" << std::endl; return FAIL;}
                 stat = rightScan->GetNext(rightrid,rightarr,right.recLen); if (stat != OK) {std::cout << "TRACER    8" << std::endl; return FAIL;}
