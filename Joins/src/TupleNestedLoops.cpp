@@ -40,7 +40,7 @@ Status TupleNestedLoops::Execute(JoinSpec& left, JoinSpec& right, JoinSpec& out)
 		if (leftStatus == DONE) break;
 		if (leftStatus != OK) return FAIL;
 
-		//	The join attribute on left relation
+		// The join attribute on left relation
 		int *leftJoinValPtr = (int*)(leftRec + left.offset);
 
 		//	Open scan on right relation

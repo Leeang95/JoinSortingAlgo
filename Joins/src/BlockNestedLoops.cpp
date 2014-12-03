@@ -21,6 +21,8 @@
 Status BlockNestedLoops::Execute(JoinSpec& left, JoinSpec& right, JoinSpec& out) {
 	JoinMethod::Execute(left, right, out);
 
+	// TODO: Make sure left relation is smaller.
+
 	// Create temporary heapfile
 	Status s;
 	HeapFile *tmpHeap = new HeapFile(NULL, s);
