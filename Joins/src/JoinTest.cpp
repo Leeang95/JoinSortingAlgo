@@ -193,6 +193,10 @@ bool JoinTest::CompareJoins(JoinMethod& j1, JoinMethod& j2,
 	if(out1.file->GetNumOfRecords() != out2.file->GetNumOfRecords()) {
 		std::cerr << "Error: Join results have different number of records." 
 			      << std::endl;
+
+		int s1 = out1.file->GetNumOfRecords();
+		int s2 = out2.file->GetNumOfRecords();
+		std::cout << "Size 1: " << s1 << ", Size 2: " << s2 << std::endl;
 		return false;
 	}
 
