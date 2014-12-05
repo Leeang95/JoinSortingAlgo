@@ -105,7 +105,7 @@ Status SortMerge::Execute(JoinSpec& left, JoinSpec& right, JoinSpec& out) {
 				
 				// Need to check if JoinSpecs have been swapped
 					if (swapped) 
-						MakeNewRecord(joinedRec, sortedRightRec, sortedLeftRec, left, right);
+						MakeNewRecord(joinedRec, sortedRightRec, sortedLeftRec, right, left);
 					else
 						MakeNewRecord(joinedRec, sortedLeftRec, sortedRightRec, left, right);
 
