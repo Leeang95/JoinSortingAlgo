@@ -1,8 +1,6 @@
 #include "join.h"
 #include "scan.h"
-#include <iostream>
 
-using namespace std;
 
 //---------------------------------------------------------------
 // SortMerge::Execute
@@ -19,99 +17,122 @@ using namespace std;
 //---------------------------------------------------------------
 Status SortMerge::Execute(JoinSpec& left, JoinSpec& right, JoinSpec& out) {
 	JoinMethod::Execute(left, right, out);
-	Status stat;
 
-	// Create temporary heapfile
-	HeapFile *tmpHeap = new HeapFile(NULL, stat); if (stat != OK) {std::cerr << "Failed to create output heapfile." << std::endl; return FAIL;}
-
-	/////// ***** Phase 1: Sorting ***** //////
-	HeapFile *L = JoinMethod::SortHeapFile(left.file,left.recLen,left.offset);
-	HeapFile *R = JoinMethod::SortHeapFile(right.file,right.recLen,right.offset);
-
-	// Open scan on left relation
-	Scan *leftScan = L->OpenScan(stat); if (stat != OK) {std::cerr << "Failed to open scan on left relation." << std::endl; return FAIL;}
-
-	// Open scan on right relation
-	Scan *rightScan = R->OpenScan(stat); if (stat != OK) {std::cerr << "Failed to open scan on right relation." << std::endl;return FAIL;}
-
-	////// ***** Phase 2: Merging ***** //////
-	RecordID leftrid, rightrid, insertedrid, fixLeft, fixRight, eopLeft, eopRight;
-	int *leftJoinAttr = new int();
-	int *rightJoinAttr = new int();
-    int *leftJoinAttrPrime = new int();
-	int *rightJoinAttrPrime = new int();
-	char *leftarr = new char[left.recLen];
-	char *rightarr = new char[right.recLen];
-	char *joinedarr = new char[out.recLen];
-
-	// Get the first tuples from the left and right relations.
-	stat = leftScan->GetNext(leftrid,leftarr,left.recLen); if (stat != OK) {std::cout << "TRACER    1" << std::endl; return FAIL;}
-	stat = rightScan->GetNext(rightrid,rightarr,right.recLen); if (stat != OK) {std::cout << "TRACER    2" << std::endl; return FAIL;}
-	*leftJoinAttr = *leftJoinAttrPrime = *(int*)(leftarr + left.offset);
-	*rightJoinAttr = *rightJoinAttrPrime = *(int*)(rightarr + right.offset);
-
-	while (!leftScan->noMore && !rightScan->noMore) {
-		if (*leftJoinAttr < *rightJoinAttr) {
-			stat = leftScan->GetNext(leftrid,leftarr,left.recLen); if (stat != OK) {std::cout << "TRACER    3" << std::endl; return FAIL;}
-			*leftJoinAttr = *leftJoinAttrPrime = *(int*)(leftarr + left.offset);
-		}
-		else if (*leftJoinAttr > *rightJoinAttr) {
-			stat = rightScan->GetNext(rightrid,rightarr,right.recLen); if (stat != OK) {std::cout << "TRACER    4" << std::endl; return FAIL;}
-			*rightJoinAttr = *rightJoinAttrPrime = *(int*)(rightarr + right.offset);
-		}
-		else {
-			// Mark beginning of each LEFT and RIGHT partition.
-			fixLeft = eopLeft = leftScan->currRid;
-			fixRight = eopRight = rightScan->currRid;
-
-			// Continue scanning current RIGHT relation to find the end of the RIGHT partition (eopRight is index of first element after partition).
-			while (!rightScan->noMore && rightJoinAttr == rightJoinAttrPrime) {
-				stat = rightScan->GetNext(rightrid,rightarr,right.recLen); if (stat != OK) {std::cout << "TRACER    5" << std::endl; return FAIL;}
-				rightJoinAttrPrime = (int*)(rightarr + right.offset);
-				eopRight = rightScan->currRid;
-			}
-			rightScan->MoveTo(fixRight);
-		    stat = rightScan->GetNext(rightrid,rightarr,right.recLen); if (stat != OK) {std::cout << "TRACER    6" << std::endl; return FAIL;}
-
-			// Continue scanning current LEFT relation to find the end of the LEFT partition (eopLeft is index of first element after partition).
-			while (!leftScan->noMore && leftJoinAttr == leftJoinAttrPrime) {
-				stat = leftScan->GetNext(leftrid,leftarr,left.recLen); if (stat != OK) {std::cout << "TRACER    7" << std::endl; return FAIL;}
-				leftJoinAttrPrime = (int*)(leftarr + left.offset);
-				eopLeft = leftScan->currRid;
-			}
-			leftScan->MoveTo(fixLeft);
-	        stat = leftScan->GetNext(leftrid,leftarr,left.recLen); if (stat != OK) {std::cout << "TRACER    8" << std::endl; return FAIL;}
-
-			// For each element of LEFT partition, join with each element of RIGHT partition.
-			while (!leftScan->noMore && leftScan->currRid != eopLeft) {
-				while (!rightScan->noMore && rightScan->currRid != eopRight) {
-					JoinMethod::MakeNewRecord(joinedarr,leftarr,rightarr,left,right);
-					stat = tmpHeap->InsertRecord(joinedarr,out.recLen,insertedrid); if (stat != OK) {std::cout << "TRACER    9" << std::endl; return FAIL;}
-					stat = rightScan->GetNext(rightrid,rightarr,right.recLen); if (stat != OK) {std::cout << "TRACER    10" << std::endl; return FAIL;}
-					if (rightScan->noMore) {
-						JoinMethod::MakeNewRecord(joinedarr,leftarr,rightarr,left,right);
-						stat = tmpHeap->InsertRecord(joinedarr,out.recLen,insertedrid); if (stat != OK) {std::cout << "TRACER    11" << std::endl; return FAIL;}
-					}
-				}
-				rightScan->MoveTo(fixRight);
-				stat = leftScan->GetNext(leftrid,leftarr,left.recLen); if (stat != OK) {std::cout << "TRACER    12" << std::endl; return FAIL;}
-				if (leftScan->noMore) {
-					JoinMethod::MakeNewRecord(joinedarr,leftarr,rightarr,left,right);
-						stat = tmpHeap->InsertRecord(joinedarr,out.recLen,insertedrid); if (stat != OK) {std::cout << "TRACER    13" << std::endl; return FAIL;}
-				}
-			}
-			rightScan->MoveTo(eopRight);
-			stat = rightScan->GetNext(rightrid,rightarr,right.recLen); if (stat != OK) {std::cout << "TRACER    14" << std::endl; return FAIL;}
-		}
+	// Create the temporary heapfile
+	Status s;
+	HeapFile *tmpHeap = new HeapFile(NULL, s);
+	if (s != OK) {
+		std::cerr << "Failed to create output heapfile." << std::endl;
+		return FAIL;
 	}
-	
+
+	// Need to sort relations
+	HeapFile *sortedLeft = JoinMethod::SortHeapFile(left.file, left.recLen, left.offset);
+	HeapFile *sortedRight = JoinMethod::SortHeapFile(right.file, right.recLen, right.offset);
+
+	// Open scan on sorted left relation
+	Status sortedLeftStatus;
+	Scan *sortedLeftScan = sortedLeft->OpenScan(sortedLeftStatus);
+	if (sortedLeftStatus != OK) {
+		std::cerr << "Failed to open scan on sorted left relation" << std::endl;
+		return FAIL;
+	}
+
+	// Open scan on sorted right relation
+	Status sortedRightStatus;
+	Scan *sortedRightScan = sortedRight->OpenScan(sortedRightStatus);
+	if (sortedRightStatus != OK) {
+		std::cerr << "Failed to open scan on sorted right relation." << std::endl;
+		return FAIL;
+	}
+
+	// Get first elements of each relation.
+	char *sortedLeftRec = new char [left.recLen];
+	RecordID sortedLeftRid;
+	sortedLeftStatus = sortedLeftScan->GetNext(sortedLeftRid, sortedLeftRec, left.recLen);
+	if (sortedLeftStatus == DONE) return FAIL; // Left relation was empty
+	if (sortedLeftStatus != OK) return FAIL;
+	int *tR = (int*)(sortedLeftRec + left.offset);
+
+	char *sortedRightRec = new char[right.recLen];
+	RecordID sortedRightRid;
+	sortedRightStatus = sortedRightScan->GetNext(sortedRightRid, sortedRightRec, right.recLen);
+	if (sortedRightStatus == DONE) return FAIL; // Right relation was empty
+	if (sortedRightStatus != OK) return FAIL;
+	int *tS = (int*)(sortedRightRec + right.offset);
+
+	// Pointer to start of each partition
+	RecordID partitionRid;
+	int *tG = new int();
+	*tG = *tS;
+
+	// Keep scanning as long as we still can
+	while (sortedLeftStatus == OK && sortedRightStatus == OK) {
+		// Continue to scan R
+		while (*tR < *tG) {
+			sortedLeftStatus = sortedLeftScan->GetNext(sortedLeftRid, sortedLeftRec, left.recLen);
+			if (sortedLeftStatus == DONE) break;
+			if (sortedLeftStatus != OK) return FAIL;
+			tR = (int*)(sortedLeftRec + left.offset);
+		}
+		// Continue to scan S
+		while (*tR > *tG) {
+			sortedRightStatus = sortedRightScan->GetNext(sortedRightRid, sortedRightRec, right.recLen);
+			if (sortedRightStatus == DONE) break;
+			if (sortedRightStatus != OK) return FAIL;
+			tG = (int*)(sortedRightRec + right.offset);
+		}
+
+		*tS = *tG;
+		partitionRid = sortedRightRid;
+		
+		while (*tR == *tG) {
+			// Reset partition iterator tS
+			*tS = *tG;
+			while (*tS == *tR) {
+				//	Create the record and insert into tmpHeap...
+				char *joinedRec = new char[out.recLen];
+				MakeNewRecord(joinedRec, sortedLeftRec, sortedRightRec, left, right);
+				RecordID insertedRid;
+				Status tmpStatus = tmpHeap->InsertRecord(joinedRec, out.recLen, insertedRid);
+
+				if (tmpStatus != OK) {
+					std::cerr << "Failed to insert tuple into output heapfile." << std::endl;
+					return FAIL;
+				}
+				delete [] joinedRec;
+
+				sortedRightStatus = sortedRightScan->GetNext(sortedRightRid, sortedRightRec, right.recLen);
+				if (sortedRightStatus == DONE) break; //{sortedRightStatus = OK; break;}
+				if (sortedRightStatus != OK) return FAIL;
+				tS = (int*)(sortedRightRec + right.offset);
+			}
+
+			// Setup next tuple from left relation
+			sortedLeftStatus = sortedLeftScan->GetNext(sortedLeftRid, sortedLeftRec, left.recLen);
+			if (sortedLeftStatus == DONE) break;
+			if (sortedLeftStatus != OK) return FAIL;
+			tR = (int*)(sortedLeftRec + left.offset);
+
+			// Setup pointer to last known partition for new tuple from left relation
+			*tS = *tG;
+			sortedRightScan->MoveTo(partitionRid);
+			sortedRightStatus = sortedRightScan->GetNext(sortedRightRid, sortedRightRec, right.recLen);
+		}
+
+		// Initialize search for next partition
+		*tG = *tS;
+		sortedRightScan->MoveTo(sortedRightRid);
+		if (sortedRightStatus != DONE) 
+			sortedRightStatus = sortedRightScan->GetNext(sortedRightRid, sortedRightRec, right.recLen);
+	}
+
 	out.file = tmpHeap;
-	delete[] leftarr;
-	delete[] rightarr;
-	delete[] joinedarr;
-	delete leftJoinAttr;
-	delete rightJoinAttr;
-    delete leftJoinAttrPrime;
-	delete rightJoinAttrPrime;
+	delete sortedLeftScan;
+	delete [] sortedLeftRec;
+
+	delete sortedRightScan;
+	delete [] sortedRightRec;
+
 	return OK;
 }

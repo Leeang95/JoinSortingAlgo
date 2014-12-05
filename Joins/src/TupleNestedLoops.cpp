@@ -23,7 +23,7 @@ Status TupleNestedLoops::Execute(JoinSpec& left, JoinSpec& right, JoinSpec& out)
 		std::cerr << "Failed to create output heapfile." << std::endl;
 		return FAIL;
 	}
-
+		
 	//	Open scan on left relation
 	Status leftStatus;
 	Scan *leftScan = left.file->OpenScan(leftStatus);
