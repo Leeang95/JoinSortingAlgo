@@ -21,7 +21,15 @@
 Status BlockNestedLoops::Execute(JoinSpec& left, JoinSpec& right, JoinSpec& out) {
 	JoinMethod::Execute(left, right, out);
 
-	// TODO: Make sure left relation is smaller.
+	// Make sure left relation is smaller, if not need to swap JoinSpecs
+	bool swapped = false;
+	if (left.file->GetNumOfRecords() > right.file->GetNumOfRecords()) {
+		JoinSpec tmp = left;
+		left = right;
+		right = tmp;
+
+		swapped = true;
+	}
 
 	// Create temporary heapfile
 	Status s;
@@ -89,7 +97,13 @@ Status BlockNestedLoops::Execute(JoinSpec& left, JoinSpec& right, JoinSpec& out)
 				if (*leftJoinValPtr == *rightJoinValPtr) {
 				// Create the record and insert into tmpHeap
 					char *joinedRec = new char[out.recLen];
-					MakeNewRecord(joinedRec, (*block)[i], rightRec, left, right);
+
+					// Need to check if JoinSpecs have been swapped
+					if (swapped) 
+						MakeNewRecord(joinedRec, rightRec, (*block)[i], right, left);
+					else
+						MakeNewRecord(joinedRec, (*block)[i], rightRec, left, right);
+
 					RecordID insertedRid;
 					Status tmpStatus = tmpHeap->InsertRecord(joinedRec, out.recLen, insertedRid);
 					

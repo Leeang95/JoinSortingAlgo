@@ -24,6 +24,16 @@
 Status IndexNestedLoops::Execute(JoinSpec& left, JoinSpec& right, JoinSpec& out) {
 	JoinMethod::Execute(left, right, out);
 
+	// Make sure left relation is smaller, if not need to swap JoinSpecs
+	bool swapped = false;
+	if (left.file->GetNumOfRecords() > right.file->GetNumOfRecords()) {
+		JoinSpec tmp = left;
+		left = right;
+		right = tmp;
+
+		swapped = true;
+	}
+
 	// Create temporary heapfile
 	Status s;
 	HeapFile *tmpHeap = new HeapFile(NULL, s);
@@ -113,7 +123,13 @@ Status IndexNestedLoops::Execute(JoinSpec& left, JoinSpec& right, JoinSpec& out)
 				}
 				// Create new record and insert into tmpHeap
 				char *joinedRec = new char[out.recLen];
-				MakeNewRecord(joinedRec,leftRec,rightRec,left,right);
+
+				// Need to check if JoinSpecs have been swapped
+					if (swapped) 
+						MakeNewRecord(joinedRec, rightRec, leftRec, right, left);
+					else
+						MakeNewRecord(joinedRec, leftRec, rightRec, left, right);
+
 				RecordID insertedRid;
 				Status tmpStatus = tmpHeap->InsertRecord(joinedRec, out.recLen, insertedRid);
 				if (tmpStatus != OK) {
